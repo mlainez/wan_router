@@ -52,43 +52,71 @@ config :nerves, :erlinit,
 
 # Configure the network using vintage_net.
 #
-# WAN side: wwan0 is the in-kernel QMI modem on the Fairphone 2. APN "simbase"
-# is hardcoded; tweak service_providers for other carriers.
+# WAN side: TWO upstream interfaces, both providing internet and NAT'd to the
+# LAN (see WanRouter.WanForward):
+#   * wwan0 — the in-kernel QMI modem on the Fairphone 2. APN "simbase" is
+#     hardcoded; tweak service_providers for other carriers.
+#   * wlan0 — WiFi client (station) joining an upstream access point. Credentials
+#     come from config/.env.exs (gitignored), which sets WIFI_SSID / WIFI_PSK.
+#     vintage_net's default route prioritization prefers WiFi (wlan0) over mobile
+#     (wwan0), so cellular acts as failover when WiFi is down.
 #
-# LAN side: eth0 is the downstream interface. VintageNet runs one_dhcpd inline
-# (via the :dhcpd key) so plugged-in devices auto-configure.
+# LAN side: eth0 is the downstream interface, static 10.0.1.42/24.
 #
 # Update regulatory_domain to your 2-letter country code E.g., "US"
 #
 # See https://github.com/nerves-networking/vintage_net for more information
+
+# Secondary WAN over WiFi. Built from env vars set by config/.env.exs so the
+# passphrase never lands in git. If they're absent, wlan0 is left unconfigured
+# and the firmware still builds (cellular-only).
+wlan_wan =
+  case {System.get_env("WIFI_SSID"), System.get_env("WIFI_PSK")} do
+    {ssid, psk} when is_binary(ssid) and ssid != "" and is_binary(psk) and psk != "" ->
+      [
+        {"wlan0",
+         %{
+           type: VintageNetWiFi,
+           vintage_net_wifi: %{
+             networks: [%{key_mgmt: :wpa_psk, ssid: ssid, psk: psk}]
+           },
+           ipv4: %{method: :dhcp}
+         }}
+      ]
+
+    _ ->
+      []
+  end
+
 config :vintage_net,
   regulatory_domain: "00",
-  config: [
-    {"usb0", %{type: VintageNetDirect}},
-    {"eth0",
-     %{
-       type: VintageNetEthernet,
-       ipv4: %{
-         method: :static,
-         address: "10.0.3.1",
-         prefix_length: 24
-       }
-       # TODO: LAN clients won't get a lease until we run a DHCP server
-       # ourselves (VintageNet has no server side). Plan: spawn busybox
-       # udhcpd or dnsmasq from a WanRouter child process bound to eth0.
-     }},
-    {"wwan0", %{
-      type: VintageNetQMI,
-      vintage_net_qmi: %{
-        ip_method: :qmi_profile,
-        device_path: "/dev/wwan0qmi0",
-        provision_uim: true,
-        service_providers: [
-          %{apn: "simbase", auth_method: :none, pdp_type: :ipv4, roaming_allowed?: true}
-        ]
-      }
-    }}
-  ]
+  config:
+    [
+      {"usb0", %{type: VintageNetDirect}},
+      {"eth0",
+       %{
+         type: VintageNetEthernet,
+         ipv4: %{
+           method: :static,
+           address: "10.0.1.42",
+           prefix_length: 24
+         }
+         # TODO: LAN clients won't get a lease until we run a DHCP server
+         # ourselves (VintageNet has no server side). Plan: spawn busybox
+         # udhcpd or dnsmasq from a WanRouter child process bound to eth0.
+       }},
+      {"wwan0", %{
+        type: VintageNetQMI,
+        vintage_net_qmi: %{
+          ip_method: :qmi_profile,
+          device_path: "/dev/wwan0qmi0",
+          provision_uim: true,
+          service_providers: [
+            %{apn: "simbase", auth_method: :none, pdp_type: :ipv4, roaming_allowed?: true}
+          ]
+        }
+      }}
+    ] ++ wlan_wan
 
 config :mdns_lite,
   # The `hosts` key specifies what hostnames mdns_lite advertises.  `:hostname`
@@ -99,7 +127,8 @@ config :mdns_lite,
   # because otherwise any of the devices may respond to nerves.local leading to
   # unpredictable behavior.
 
-  hosts: [:hostname, "ovcs-4g-gw"],
+  hosts: [:hostname, "ovcs1-router"],
+
   ttl: 120,
 
   # Advertise the following services over mDNS.
