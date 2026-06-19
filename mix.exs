@@ -53,8 +53,7 @@ defmodule WanRouter.MixProject do
       # remoteproc) and rmtfs (so the modem can reach its NV partitions)
       # before VintageNet tries to configure wwan0.
       {:ex_rmtfs, github: "mlainez/ex_rmtfs", branch: "main", targets: @all_targets},
-
-      {:nerves_system_fairphone2, path: "../nerves_system_fairphone2", runtime: false, targets: :nerves_system_fairphone2, nerves: [compile: true]}
+      {:nerves_system_fairphone2, github: "Spin42/nerves_system_fairphone2", tag: "v1.33.8", runtime: false, targets: @all_targets}
     ]
   end
 
