@@ -12,8 +12,11 @@ plugged into Ethernet (`eth0`).
   via DHCP. Credentials come from `config/.env.exs` (gitignored); see
   [WiFi setup](#wifi-setup). If no credentials are set, `wlan0` is left
   unconfigured and the device runs cellular-only.
-- **WAN priority**: vintage_net's default route prioritization prefers WiFi
-  (`wlan0`) over mobile (`wwan0`), so `wwan0` acts as failover when WiFi is down.
+- **WAN priority**: `WanRouter.RouteMetric` (wired in via vintage_net's
+  `:route_metric_fun`) guarantees WiFi (`wlan0`) outranks the 4G modem
+  (`wwan0`) at every connectivity tier, so `wwan0` is failover only. Ordering
+  stays internet-before-LAN, so traffic still falls over to 4G if the WiFi AP
+  loses its own upstream.
 - **LAN — `eth0`**: static `10.0.1.42/24`. This is the gateway address LAN
   clients use. There is **no DHCP server yet** (see the TODO in
   `config/target.exs`), so clients must be configured statically — e.g. address

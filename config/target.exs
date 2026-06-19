@@ -89,6 +89,9 @@ wlan_wan =
   end
 
 config :vintage_net,
+  # Guarantee wlan0 (WiFi) is preferred over wwan0 (4G) for the default route;
+  # 4G is failover only. See WanRouter.RouteMetric.
+  route_metric_fun: {WanRouter.RouteMetric, :compute, 2},
   regulatory_domain: "00",
   config:
     [
